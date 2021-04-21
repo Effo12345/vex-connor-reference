@@ -1,0 +1,18 @@
+Re-write PID to use tracking wheel and gyro to account for drift
+
+
+Tune PID using math:
+        drive 
+        turn
+        speed
+
+
+//  Output to SD card:
+//  https://pros.cs.purdue.edu/v5/tutorials/topical/filesystem.html
+//  Ex:
+//  Testdata = fopen("/usd/testdata.txt", "w");
+//  fprintf(Testdata, "%G , ", error);
+
+
+
+

@@ -1,0 +1,282 @@
+#pragma once
+#include"vex.h"
+//PID Control loop constants
+float Kp_drive = 10;
+float Ki_drive = .0003;
+float Kd_drive = 6;
+float gyro_influence_multiplier = 0;  // influence gyro has on power of
+                                      // PID_drive function
+float Kp_drive_trn = 2;
+float Ki_drive_trn = 0;
+float Kd_drive_trn = 1.5;
+
+
+float kp_trn = 1.5;
+float ki_trn = .0003;
+float kd_trn = 2.5; //3.5
+float encoder_influence_multiplier = 4; // influence encoders have on power of
+                                        // PID_drvTrn function
+int I_drive_max = 10000; // used to prevent integral saturation in PID loop
+int I_drvTrn_max = 10000;
+
+void PID_drive(int endpoint, int max_speed, int allowable_error){
+  bool done = false;    // tells if drive is done
+  float P_power = 0;    // power of proportional control system
+  float I_power = 0;    // power of integral control system
+  float D_power = 0;    // power of derivative control system
+  float error = 0;      // error of system (end value - current value)
+  float drv_val = 0;    // averaged value of all drive encoders
+  float error_past = 0; // error of previous run through
+  float pwr = 0;        // original power of motors in rpm
+  float pwr_R = 0;      // power of the right motors in rpm
+  float pwr_L = 0;      // power of the left motors in rpm
+  float gyro_influence = gyro_influence_multiplier * (max_speed/200);
+
+  int heading = G1.value(vex::rotationUnits::deg);
+                        // stores original direction of robot
+  driveL.resetRotation();
+  driveR.resetRotation();
+  driveL1.resetRotation();  // resets motor rotation to make sure that
+  driveR1.resetRotation();  // motors start out at zero
+  while(done == false){
+    error_past = error;
+    // averages back drive encoder values
+    drv_val = ((driveL1.rotation(vex::rotationUnits::deg) +
+      driveR1.rotation(vex::rotationUnits::deg))/2);
+
+    error = endpoint - drv_val;   // finds error by subtracting endpoint
+                                  // from current averaged value
+    P_power = error;              // speeds up robot proportional to
+                                  // the current error
+    I_power = I_power + error;    // allows robot to keep speed up while also
+                                  // allowing for the robot to slow down
+    if(I_power < I_drive_max)
+      I_power = I_drive_max;  // limits integral to a set value to stop
+                              // integral saturation
+    D_power = error - error_past; // allows robot to predict the future to 
+                                  // slow down before reaching the endpoint
+    pwr = (P_power*Kp_drive) + 
+            (I_power*Ki_drive) + 
+            (D_power*Kd_drive); // calculates power by adding all the weighted
+                                // values of the control systems together
+    if(pwr > max_speed)
+      pwr = max_speed;        // limits max motor speed to 100 percent
+    else if(pwr < -1*(max_speed))
+      pwr = -1*max_speed;     // limits max motor speed to 100 percent
+    if(endpoint-allowable_error < drv_val &&
+       drv_val < endpoint+allowable_error){
+      done = true;  // sets while loop to end
+      pwr = 0;      // sets power to zero to stop motors
+      std::cout << "DONE\n";
+    }
+    // G1 increases in value as the robot drifts to the right
+    // G1 decreases in value as the robot drifts to the left
+    pwr_L = pwr - gyro_influence*(G1.value(vex::rotationUnits::deg) - heading);
+    pwr_R = pwr + gyro_influence*(G1.value(vex::rotationUnits::deg) - heading);
+      // Add or subtract the difference between current direction
+      // and previous heading
+      // The difference is positive as the robot drifts right
+      // The difference is negative as the robot drifts left
+
+                // set drive power to the set power of the PID loop
+    driveL.spin(vex::directionType::fwd, pwr_L, vex::velocityUnits::rpm);
+    driveR.spin(vex::directionType::fwd, pwr_R, vex::velocityUnits::rpm);
+    driveL1.spin(vex::directionType::fwd, pwr_L, vex::velocityUnits::rpm);
+    driveR1.spin(vex::directionType::fwd, pwr_R, vex::velocityUnits::rpm);
+    //std::cout << "error:" << (G1.value(vex::rotationUnits::deg) - heading) << "\n";
+    //std::cout << "power:" << pwr << "\n";
+    vex::task::sleep(10);
+  }
+  driveL.stop(vex::brakeType::brake);
+  driveR.stop(vex::brakeType::brake);
+  driveL1.stop(vex::brakeType::brake);
+  driveR1.stop(vex::brakeType::brake);
+}
+
+void PID_drvtrn(int endpointL,int endpointR, int max_speed, int allowable_error){
+  bool done = false;    // tells if drive is done
+  float P_powerR = 0;    // power of proportional control system
+  float I_powerR = 0;    // power of integral control system
+  float D_powerR = 0;    // power of derivative control system
+  float errorR = 0;      // error of system (end value - current value)
+  float drv_valR = 0;    // averaged value of all drive encoders
+  float error_pastR = 0; // error of previous run through
+  float P_powerL = 0;    // power of proportional control system
+  float I_powerL = 0;    // power of integral control system
+  float D_powerL = 0;    // power of derivative control system
+  float errorL = 0;      // error of system (end value - current value)
+  float drv_valL = 0;    // averaged value of all drive encoders
+  float error_pastL = 0; // error of previous run through
+  float pwr = 0;        // original power of motors in rpm
+  float pwr_R = 0;      // power of the right motors in rpm
+  float pwr_L = 0;      // power of the left motors in rpm
+                        // stores original direction of robot
+  driveL.resetRotation();
+  driveR.resetRotation();
+  driveL1.resetRotation();  // resets motor rotation to make sure that
+  driveR1.resetRotation();  // motors start out at zero
+  while(done == false){
+    error_pastR = errorR;
+    error_pastL = errorL;
+    // averages back drive encoder values
+    drv_valL = driveL1.rotation(vex::rotationUnits::deg);
+    drv_valR = driveR1.rotation(vex::rotationUnits::deg);
+
+    errorR = endpointR - drv_valR;// finds error by subtracting endpoint
+    errorL = endpointL - drv_valL;
+                                  // from current averaged value
+    P_powerL = errorL;            // speeds up robot proportional to
+    P_powerR = errorR;
+                                  // the current error
+    I_powerR = I_powerR + errorR; // allows robot to keep speed up while also
+    I_powerL = I_powerL + errorL; // allowing for the robot to slow down
+    if(I_powerL < I_drive_max)
+      I_powerL = I_drive_max;     // limits integral to a set value to stop
+                                  // integral saturation
+    if(I_powerR < I_drive_max)
+      I_powerR = I_drive_max;     // limits integral to a set value to stop
+    
+    D_powerR = errorR - error_pastR;// allows robot to predict the future to 
+    D_powerL = errorL - error_pastL;// slow down before reaching the endpoint
+    pwr_L = (P_powerL*Kp_drive_trn) + 
+            (I_powerL*Ki_drive_trn) + 
+            (D_powerL*Kd_drive_trn); // calculates power by adding all the weighted
+                                // values of the control systems together
+    pwr_R = (P_powerR*Kp_drive_trn) + 
+            (I_powerR*Ki_drive_trn) + 
+            (D_powerR*Kd_drive_trn); // calculates power by adding all the weighted
+                                // values of the control systems together
+    if(pwr > max_speed)
+      pwr = max_speed;        // limits max motor speed to 100 percent
+    else if(pwr < -1*(max_speed))
+      pwr = -1*max_speed;     // limits max motor speed to 100 percent
+    if(endpointL-allowable_error < drv_valL &&
+       drv_valL < endpointL+allowable_error &&
+       endpointR-allowable_error < drv_valR &&
+       drv_valR < endpointR+allowable_error){
+      done = true;  // sets while loop to end
+      pwr = 0;      // sets power to zero to stop motors
+      std::cout << "DONE\n";
+    }
+                // set drive power to the set power of the PID loop
+    driveL.spin(vex::directionType::fwd, pwr_L, vex::velocityUnits::rpm);
+    driveR.spin(vex::directionType::fwd, pwr_R, vex::velocityUnits::rpm);
+    driveL1.spin(vex::directionType::fwd, pwr_L, vex::velocityUnits::rpm);
+    driveR1.spin(vex::directionType::fwd, pwr_R, vex::velocityUnits::rpm);
+    //std::cout << "error:" << (G1.value(vex::rotationUnits::deg) - heading) << "\n";
+    //std::cout << "power:" << pwr << "\n";
+    vex::task::sleep(10);
+  }
+  driveL.stop(vex::brakeType::brake);
+  driveR.stop(vex::brakeType::brake);
+  driveL1.stop(vex::brakeType::brake);
+  driveR1.stop(vex::brakeType::brake);
+}
+
+/*
+void PID_drvTrn_Gyro(int degrees,int max_speed, float allowable_error){
+  bool done = false;    // tells if drive is done
+  float P_power = 0;    // power of proportional control system
+  float I_power = 0;    // power of integral control system
+  float D_power = 0;    // power of derivative control system
+  float error = 0;      // error of system (end value - current value)
+  float error_past = 0; // error of previous run through
+  float pwr = 0;        // original power of motors in rpm
+  float pwr_R = 0;      // power of the right motors in rpm
+  float pwr_L = 0;      // power of the left motors in rpm
+  float encoder_influence = encoder_influence_multiplier * (max_speed/200);
+  //int turn_direction = 1;
+  float adjusted_error = 0;
+  bool overflow = false;
+  bool underflow = false;
+                        // adjusts power of encoder difference based on
+                        // difference of encoder values
+  float desired_heading = G1.value(vex::rotationUnits::deg) + degrees;
+  float abs_heading = 0;
+
+  //if(degrees == abs(degrees))
+    //turn_direction = 1;
+  //else
+    //turn_direction = -1;
+
+
+                        // the absolute heading desired
+  while( 360 < desired_heading || desired_heading < 0){
+    if(desired_heading > 360){
+      desired_heading = desired_heading - 360;
+      overflow = true;
+    }
+    if(desired_heading < 0){
+      desired_heading = desired_heading + 360;
+      underflow = true;
+    }
+  }
+  
+  while(done == false){
+    error_past = error;
+    if(underflow || overflow){
+      if(G1.value(vex::rotationUnits::deg) >= 0)
+        abs_heading = G1.value(vex::rotationUnits::deg);
+      else
+        abs_heading = G1.value(vex::rotationUnits::deg) + 360;
+    }
+    error = desired_heading - abs_heading;
+    
+    if(underflow){
+      adjusted_error = (desired_heading - 360) - abs_heading;
+      if(fabs(adjusted_error) < fabs(error))
+        error = adjusted_error;
+    }
+    else if(overflow){
+      adjusted_error = (360 - desired_heading) + abs_heading;
+      if(fabs(adjusted_error) < fabs(error))
+        error = adjusted_error;
+    }
+    
+                                  // finds error by subtracting desired
+                                  // heading from current heading
+    P_power = error;              // speeds up robot proportional to
+                                  // the current error
+    I_power = I_power + error;    // allows robot to keep speed up while also
+                                  // allowing for the robot to slow down
+    if(I_power < I_drvTrn_max)
+      I_power = I_drvTrn_max;  // limits integral to a set value to stop
+                              // integral saturation
+    D_power = error - error_past; // allows robot to predict the future to 
+                                  // slow down before reaching the endpoint
+    pwr = (P_power*kp_trn) + 
+            (I_power*ki_trn) + 
+            (D_power*kd_trn); // calculates power by adding all the weighted
+                                // values of the control systems together
+    if(pwr > max_speed)
+      pwr = max_speed;        // limits max motor speed to 100 percent
+    else if(pwr < -1*(max_speed))
+      pwr = -1*max_speed;     // limits max motor speed to 100 percent
+
+      pwr_L = pwr;
+      pwr_R = pwr*-1;
+
+
+    if(desired_heading-allowable_error < 
+        abs_heading && 
+        abs_heading < 
+        desired_heading+allowable_error){
+      done = true;  // sets while loop to end
+      pwr = 0;      // sets power to zero to stop motors
+      std::cout << "DONE\n";
+    }
+
+                // set drive power to the set power of the PID loop
+    driveL.spin(vex::directionType::fwd, pwr_L, vex::velocityUnits::rpm);
+    driveR.spin(vex::directionType::fwd, pwr_R, vex::velocityUnits::rpm);
+    driveL1.spin(vex::directionType::fwd, pwr_L, vex::velocityUnits::rpm);
+    driveR1.spin(vex::directionType::fwd, pwr_R, vex::velocityUnits::rpm);
+
+    vex::task::sleep(10);
+  }
+  driveL.stop(vex::brakeType::hold);
+  driveR.stop(vex::brakeType::hold);
+  driveL1.stop(vex::brakeType::hold);
+  driveR1.stop(vex::brakeType::hold);
+}
+*/
